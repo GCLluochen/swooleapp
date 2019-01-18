@@ -30,7 +30,7 @@ class Swoole extends Server
         $this->option['document_root'] = Env::get('root_path') . 'public/static';
         $this->ws = new \Swoole\WebSocket\Server($this->host, $this->port);
         // 监听聊天数据端口
-        $chatServer = $this->ws->listen($this->host, $this->chatPort, SWOOLE_SOCK_TCP);
+        //$chatServer = $this->ws->listen($this->host, $this->chatPort, SWOOLE_SOCK_TCP);
         $this->ws->set($this->option);
         // $chatServer->set([
         //     'open_http_protocol' => false,// 关闭聊天端口的 http 协议连接
@@ -40,7 +40,7 @@ class Swoole extends Server
         $this->ws->on("Receive", [$this, "onReceive"]);
         $this->ws->on("Open", [$this, "onOpen"]);
         $this->ws->on("Message", [$this, "onMessage"]);
-        $chatServer->on("Message", [$this, "onChatMessage"]);
+        //$chatServer->on("Message", [$this, "onChatMessage"]);
         $this->ws->on("Request", [$this, "onRequest"]);
         $this->ws->on("Task", [$this, "onTask"]);
         $this->ws->on("Finish", [$this, "onFinish"]);
@@ -90,6 +90,21 @@ class Swoole extends Server
         //     $server->push($frame->fd, "5秒后的信息");
         //     //$server->task("From WebSocket");
         // });
+
+        //接收聊天数据
+        $data = json_decode($frame->data, true);
+        $chatTask = [
+            'method' => 'pushChat',
+            'data' => [
+                'msg_type' => 'chat',
+                'from_user' => $data['from_user'],
+                'user_name' => $data['user_name'],
+                'content' => $data['content'],
+            ],
+        ];
+        //异步推送到全部连接 ( 包括消息来源用户 )
+        $server->task($chatTask);
+
     }
 
     /**

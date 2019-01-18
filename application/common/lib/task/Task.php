@@ -47,12 +47,11 @@ class Task
     public function pushLive(array $pushData, Server $server)
     {
         //从 redis 中获取已连接的 WebSocket fd,然后推送消息
-        //$clients = PHPRedis::getInstance()->sMembers(config('redis.live_socket_key'));
-        $clients = $server->ports[0]->connections;
+        $clients = PHPRedis::getInstance()->sMembers(config('redis.live_socket_key'));
+        //$clients = $server->ports[0]->connections;
         $socketData = json_encode($pushData, JSON_UNESCAPED_UNICODE);
         foreach ($clients as $fd) {
-            print_r($fd);
-            //$server->push($fd, $socketData);
+            $server->push($fd, $socketData);
         }
     }
 
@@ -67,7 +66,7 @@ class Task
     public function pushChat(array $chatData, Server $server)
     {
         //从 redis 中获取已连接的 WebSocket fd,然后推送消息
-        $clients = $server->ports[1]->connections;//仅获取 聊天 ws 连接的fd
+        $clients = PHPRedis::getInstance()->sMembers(config('redis.live_socket_key'));//$server->ports[1]->connections;//仅获取 聊天 ws 连接的fd
         $socketData = json_encode($chatData, JSON_UNESCAPED_UNICODE);
         foreach ($clients as $fd) {
             $server->push($fd, $socketData);
