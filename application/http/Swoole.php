@@ -21,9 +21,12 @@ class Swoole extends Server
     protected $mode  = SWOOLE_PROCESS; // 运行模式 默认为SWOOLE_PROCESS
     protected $sock_type = SWOOLE_SOCK_TCP; // sock type 默认为SWOOLE_SOCK_TCP
 
+    /**
+     * 创建 Swoole Server
+     */
     public function __construct()
     {
-        //删除 全部客户端连接
+        //删除 全部客户端连接缓存
         \app\common\lib\redis\PHPRedis::getInstance()->del(config("redis.live_socket_key"));
 
         //parent::__construct();
@@ -37,6 +40,7 @@ class Swoole extends Server
         // ]);
 
         $this->ws->on("WorkerStart", [$this, "onWorkerStart"]);
+        $this->ws->on("Start", [$this, "onStart"]);
         $this->ws->on("Receive", [$this, "onReceive"]);
         $this->ws->on("Open", [$this, "onOpen"]);
         $this->ws->on("Message", [$this, "onMessage"]);
@@ -79,6 +83,17 @@ class Swoole extends Server
         define("APP_PATH", __DIR__ . "/../application");
         // 加载基础文件
         require_once dirname(APP_PATH) . '/../thinkphp/base.php';
+    }
+
+    /**
+     * 进程开始
+     *
+     * @param [type] $server
+     * @return void
+     */
+    public function onStart($server)
+    {
+        swoole_set_process_name("live_master");
     }
 
     public function onMessage($server, $frame)
@@ -131,8 +146,22 @@ class Swoole extends Server
         $server->task($chatTask);
     }
 
+    /**
+     * 处理 http 请求
+     *
+     * @param [type] $request
+     * @param [type] $response
+     * @return void
+     */
     public function onRequest($request, $response)
     {
+        //过滤浏览器图标的请求
+        if ($request->server['path_info'] == '/favicon.ico') {
+            $response->status(404);
+            $response->end();
+            return;
+        }
+
         $_SERVER = [];
         if (isset($request->server)) {
             foreach ($request->server as $k=>$val) {
@@ -156,6 +185,10 @@ class Swoole extends Server
                 $_POST[trim($k)] = $val;
             }
         }
+
+        //记录日志
+        $this->writeLog();
+
         $_POST['http_server'] = $this->ws;
         $_FILES = [];
         if (isset($request->files)) {
@@ -233,5 +266,27 @@ class Swoole extends Server
 
         //从 WebSocket 连接集合中移除当前关闭的连接 ID
         \app\common\lib\redis\PHPRedis::getInstance()->sRem(config('redis.live_socket_key'), $fd);
+    }
+
+    /**
+     * 记录请求日志
+     *
+     * @return void
+     */
+    public function writeLog()
+    {
+        //日志文件路径
+        $logPath = dirname(__DIR__) . '/../runtime/log/' . date("Ym") . '/' . date("d") . "_test.log";
+        //需要记录为日志的数据
+        $logMerge = array_merge(['date' => date("Y-m-d H:i:s")], $_GET, $_POST, $_SERVER);
+        $logStr = '';
+        foreach ($logMerge as $key=>$val) {
+            $logStr .= $key . ': ' . $val . " ";
+        }
+        $logStr .= PHP_EOL;
+        //异步写入
+        \Swoole\Async::writeFile($logPath, $logStr, function (){
+
+        }, FILE_APPEND);
     }
 }
